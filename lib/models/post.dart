@@ -6,8 +6,7 @@ class Post {
   final String? image;
   final Post? embededPost;
   final List<Post> comments;
-  final List<User> likes;
-  final List<Post> replies;
+  final List<String> likes;
   int shares;
 
   Post({
@@ -16,10 +15,8 @@ class Post {
     this.image,
     this.embededPost,
     List<Post>? comments,
-    List<User>? likes,
+    List<String>? likes,
     this.shares = 0,
-    List<Post>? replies,
   })  : comments = comments ?? [],
-        likes = likes ?? [],
-        replies = replies ?? [];
+        likes = likes ?? [];
 }

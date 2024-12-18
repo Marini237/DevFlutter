@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:newflutterapp/models/user.dart';
-import 'package:newflutterapp/models/post.dart';
+import '../models/user.dart';
+import '../models/post.dart';
 
 class ProfilePage extends StatelessWidget {
   final User user;
   final List<Post> userPosts;
 
   const ProfilePage({super.key, required this.user, required this.userPosts});
+
   int getTotalComments() {
     int totalComments = 0;
     for (var post in userPosts) {

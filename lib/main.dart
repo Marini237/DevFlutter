@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:newflutterapp/models/user.dart';
 import 'package:newflutterapp/models/post.dart';
 import 'package:newflutterapp/pages/home.dart';
+import 'package:newflutterapp/pages/profile.dart';
+import 'package:newflutterapp/pages/settings_pages.dart';
+import 'package:newflutterapp/provider/like_provider.dart';
+import 'package:newflutterapp/provider/comment_provider.dart';
+import 'package:newflutterapp/provider/share_provider.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   User shiipou = User(
@@ -20,7 +26,8 @@ void main() {
     content:
         'Laborum magna occaecat anim deserunt est eu exercitation magna ipsum magna adipisicing. Cupidatat aliqua cillum proident culpa officia commodo et. Deserunt veniam aute consequat laborum enim minim sit exercitation irure consequat pariatur eu. Mollit adipisicing dolor do minim commodo commodo elit eiusmod Lorem consectetur occaecat amet.',
     image: 'https://images.unsplash.com/photo-1635365737298-3a64d9459d83',
-    likes: [github],
+    likes: [github.username], // Utilisez le nom d'utilisateur
+    shares: 5,
   );
 
   Post commentAnswer = Post(
@@ -42,7 +49,8 @@ void main() {
         'Eiusmod consequat et excepteur Lorem sint ad elit sit exercitation. Veniam ad duis magna veniam aliquip nisi. Culpa minim minim aliqua occaecat excepteur in ea anim sit.',
     embededPost: firstPost,
     comments: [commentPost],
-    likes: [shiipou],
+    likes: [shiipou.username], // Utilisez le nom d'utilisateur
+    shares: 3,
   );
 
   List<Post> posts = [
@@ -54,28 +62,87 @@ void main() {
       'Incididunt et sunt anim deserunt eu aliqua. Adipisicing et laborum mollit ut sunt dolore cillum deserunt exercitation. Dolor quis magna ex ipsum consequat esse.',
       'Aliqua irure eu laborum qui occaecat cupidatat exercitation aliqua aliquip occaecat. Est ea pariatur labore ullamco eiusmod elit excepteur in velit dolor culpa. Deserunt sit est excepteur do voluptate cillum. Est ea id nulla culpa exercitation tempor occaecat velit labore. Occaecat esse dolore dolor et non irure officia minim ad elit exercitation. Nostrud consectetur culpa laboris cillum ullamco exercitation ipsum quis consequat et occaecat veniam.',
       'Ad aute adipisicing deserunt fugiat est ea eiusmod eiusmod adipisicing consectetur. Minim veniam labore incididunt ea do nostrud eiusmod nisi irure pariatur est nisi. Enim laboris tempor incididunt cupidatat et dolore enim sunt nisi. Et culpa et excepteur eiusmod nisi. Ut nisi deserunt ut eiusmod reprehenderit eu nostrud sit.'
-    ].map((text) => Post(owner: shiipou, content: text))
+    ].map((text) => Post(owner: shiipou, content: text)).toList()
   ];
 
-  runApp(MyApp(posts: posts));
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LikeProvider()),
+        ChangeNotifierProvider(create: (_) => CommentProvider()),
+        ChangeNotifierProvider(create: (_) => ShareProvider()),
+      ],
+      child: MyApp(posts: posts, user: shiipou),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
   final List<Post> posts;
+  final User user;
 
-  const MyApp({super.key, required this.posts});
+  const MyApp({super.key, required this.posts, required this.user});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Flutter Fundamentals',
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('My Social Network'),
-        ),
-        body: HomePage(posts: posts),
+      home: MainScreen(posts: posts, user: user),
+    );
+  }
+}
+
+class MainScreen extends StatefulWidget {
+  final List<Post> posts;
+  final User user;
+
+  const MainScreen({super.key, required this.posts, required this.user});
+
+  @override
+  _MainScreenState createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  int _selectedIndex = 0;
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Widget> widgetOptions = <Widget>[
+      HomePage(posts: widget.posts),
+      ProfilePage(user: widget.user, userPosts: widget.posts),
+      SettingsPage(),
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Social Network'),
+      ),
+      body: widgetOptions.elementAt(_selectedIndex),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: Colors.blue,
+        onTap: _onItemTapped,
       ),
     );
   }

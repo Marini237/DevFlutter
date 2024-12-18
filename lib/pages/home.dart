@@ -1,101 +1,122 @@
 import 'package:flutter/material.dart';
-import 'package:newflutterapp/models/post.dart' as models;
-import 'package:newflutterapp/pages/post_detail.dart';
-import 'package:newflutterapp/components/interactions/comment.dart';
-import 'package:newflutterapp/components/interactions/like.dart';
-import 'package:newflutterapp/components/interactions/share.dart';
+import 'package:provider/provider.dart';
+import '../models/post.dart';
+import '../provider/comment_provider.dart';
+import '../provider/like_provider.dart';
+import '../provider/share_provider.dart';
+import '../components/interactions/like.dart';
+import '../components/interactions/comment.dart';
+import '../components/interactions/share.dart';
+import 'post_detail.dart';
 
 class HomePage extends StatelessWidget {
-  final List<models.Post> posts;
+  final List<Post> posts;
 
   const HomePage({super.key, required this.posts});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Social Network'),
-        backgroundColor: Colors.blueAccent,
-      ),
-      body: ListView.builder(
-        itemCount: posts.length,
-        itemBuilder: (context, index) {
-          final post = posts[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+    return ListView.builder(
+      itemCount: posts.length,
+      itemBuilder: (context, index) {
+        final post = posts[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Affiche l'auteur du post
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundImage: NetworkImage(post.owner.avatar),
-                  ),
-                  title: Text(post.owner.username),
-                  subtitle: Text(post.content ?? 'Sans contenu'),
+                // Profil utilisateur (image et nom)
+                Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundImage: NetworkImage(post.owner.avatar),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(post.owner.username,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                  ],
                 ),
-                if (post.image != null)
-                  Image.network(
-                    post.image!,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: 200,
+                const SizedBox(height: 10),
+
+                // Contenu du post
+                if (post.content != null) Text(post.content!),
+                if (post.image != null) ...[
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(post.image!, fit: BoxFit.cover),
                   ),
-                const SizedBox(height: 8),
-                // Boutons de Like, Comment, Share
+                ],
+
+                const SizedBox(height: 10),
+
+                // Actions (Likes, Comments, Shares)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    // Bouton Like
-                    Like(
-                      likeCount: post.likes.length,
-                      onLike: () {
-                        if (!post.likes.contains(post.owner)) {
-                          post.likes.add(post.owner);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Post liké!')),
-                          );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Vous avez déjà liké ce post.')),
-                          );
-                        }
-                      },
-                    ),
-                    // Bouton Comment
-                    Comment(
-                      commentCount: post.comments.length,
-                      onComment: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PostDetailPage(post: post),
-                          ),
+                    // Gestion des likes
+                    Consumer<LikeProvider>(
+                      builder: (context, likeProvider, _) {
+                        final likeCount =
+                            likeProvider.getLikeCount(post.hashCode);
+                        final hasLiked = likeProvider.hasLiked(
+                            post.hashCode, 'currentUserId');
+                        return Like(
+                          likeCount: likeCount,
+                          onLike: () => likeProvider.toggleLike(
+                              post.hashCode, 'currentUserId'),
+                          hasLiked: hasLiked,
                         );
                       },
                     ),
-                    // Bouton Share
-                    Share(
-                      shareCount: post.shares,
-                      onShare: () {
-                        post.shares++;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Post partagé!')),
+
+                    // Gestion des commentaires
+                    Consumer<CommentProvider>(
+                      builder: (context, commentProvider, _) {
+                        final commentCount =
+                            commentProvider.getComments(post.hashCode).length;
+                        return Comment(
+                          commentCount: commentCount,
+                          onComment: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    PostDetailPage(post: post),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+
+                    // Gestion des partages
+                    Consumer<ShareProvider>(
+                      builder: (context, shareProvider, _) {
+                        final shareCount =
+                            shareProvider.getShareCount(post.hashCode);
+                        return Share(
+                          shareCount: shareCount,
+                          onShare: () {
+                            shareProvider.addShare(post.hashCode);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Post partagé avec succès !')),
+                            );
+                          },
                         );
                       },
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
               ],
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

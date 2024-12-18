@@ -4,26 +4,17 @@ class Comment extends StatelessWidget {
   final int commentCount;
   final VoidCallback onComment;
 
-  const Comment({
-    super.key,
-    required this.onComment,
-    required this.commentCount,
-  });
+  const Comment(
+      {super.key, required this.commentCount, required this.onComment});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         IconButton(
-          onPressed: () {
-            // Logique de navigation ou d'action
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Ouverture des commentaires')),
-            );
-            onComment(); // Appel du callback pour la logique supplémentaire
-          },
+          onPressed: onComment,
           icon: const Icon(Icons.comment_outlined),
-          tooltip: "Voir les commentaires",
+          tooltip: "Comment",
         ),
         Text(
           '$commentCount',
