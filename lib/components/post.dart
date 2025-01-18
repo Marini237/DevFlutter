@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:newflutterapp/components/interactions/interactions.dart';
-import 'package:newflutterapp/components/miniprofile.dart';
-import 'package:newflutterapp/components/shared_post.dart';
-import 'package:newflutterapp/models/post.dart' as models;
-import 'package:newflutterapp/pages/post_detail.dart';
-import 'package:provider/provider.dart';
-import 'package:newflutterapp/provider/like_provider.dart';
+import '../models/post.dart';
 
 class PostWidget extends StatelessWidget {
-  final models.Post post;
-  final int shareCount;
+  final Post post;
+  final int depth;
 
-  const PostWidget({super.key, required this.post, this.shareCount = 0});
+  const PostWidget({Key? key, required this.post, this.depth = 0})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    if (depth > 2) {
+      return const Text('Embedded post limit reached');
+    }
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
       elevation: 5,
@@ -26,8 +25,8 @@ class PostWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            MiniProfile(user: post.owner),
-            if (post.content != null) ...[
+            Text(post.owner.username),
+            if (post.content != null && post.content!.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(post.content!, style: const TextStyle(fontSize: 14)),
             ],
@@ -35,39 +34,34 @@ class PostWidget extends StatelessWidget {
               const SizedBox(height: 10),
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(post.image!),
+                child: Image.network(
+                  post.image!,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: 200,
+                ),
               ),
             ],
-            if (post.embededPost != null) ...[
-              const SizedBox(height: 10),
-              SharedPost(post: post.embededPost!),
-            ],
-            const SizedBox(height: 10),
-            Interactions(
-              postId: post.hashCode,
-              commentCount: post.comments.length,
-              shareCount: post.shares,
-              onComment: () => _handleComment(context),
-              onShare: () => _handleShare(context),
+            FutureBuilder<Post?>(
+              future: post.fetchEmbeddedPost(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const CircularProgressIndicator();
+                } else if (snapshot.hasError) {
+                  return Text('Error: ${snapshot.error}');
+                } else if (snapshot.hasData && snapshot.data != null) {
+                  return PostWidget(post: snapshot.data!, depth: depth + 1);
+                } else {
+                  return const SizedBox.shrink();
+                }
+              },
             ),
+            const SizedBox(height: 10),
+            Text('Comments: ${post.comments.length}'),
+            Text('Shares: ${post.shares}'),
           ],
         ),
       ),
-    );
-  }
-
-  void _handleComment(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PostDetailPage(post: post),
-      ),
-    );
-  }
-
-  void _handleShare(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Post partagé avec succès !')),
     );
   }
 }

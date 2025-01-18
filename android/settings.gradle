@@ -1,25 +1,29 @@
+// Gestion des plugins Gradle pour Flutter et Android
 pluginManagement {
     def flutterSdkPath = {
         def properties = new Properties()
         file("local.properties").withInputStream { properties.load(it) }
         def flutterSdkPath = properties.getProperty("flutter.sdk")
-        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+        assert flutterSdkPath != null : "flutter.sdk not set in local.properties"
         return flutterSdkPath
     }()
 
+    // Inclusion des outils Gradle spécifiques à Flutter
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
+        google() // Répertoire Google pour les dépendances Android
+        mavenCentral() // Maven Central pour les bibliothèques Java/Kotlin
+        gradlePluginPortal() // Portail des plugins Gradle
     }
 }
 
+// Déclaration des plugins utilisés
 plugins {
-    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version "8.1.0" apply false
-    id "org.jetbrains.kotlin.android" version "1.8.22" apply false
+    id "dev.flutter.flutter-plugin-loader" version "1.0.0" // Plugin Flutter
+    id "com.android.application" version "8.1.0" apply false // Plugin Android
+    id "org.jetbrains.kotlin.android" version "1.8.22" apply false // Plugin Kotlin
 }
 
+// Inclusion des modules du projet
 include ":app"

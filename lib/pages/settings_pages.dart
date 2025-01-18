@@ -22,17 +22,21 @@ class _SettingsPageState extends State<SettingsPage> {
       Map<String, dynamic> weatherData =
           await _weatherService.fetchWeatherData(city);
       double temperature = weatherData['current']['temp_c'];
-      setState(() {
-        _city = city;
-        _temperature = temperature.toStringAsFixed(2);
-        _error = '';
-      });
+      if (mounted) {
+        setState(() {
+          _city = city;
+          _temperature = temperature.toStringAsFixed(2);
+          _error = '';
+        });
+      }
     } catch (e) {
-      setState(() {
-        _city = 'Error';
-        _temperature = 'Error';
-        _error = e.toString();
-      });
+      if (mounted) {
+        setState(() {
+          _city = 'Error';
+          _temperature = 'Error';
+          _error = e.toString();
+        });
+      }
     }
   }
 

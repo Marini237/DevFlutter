@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../models/post.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../models/comments.dart';
 import '../provider/comment_provider.dart';
-import '../provider/like_provider.dart';
-import '../provider/share_provider.dart';
-import '../components/interactions/like.dart';
-import '../components/interactions/comment.dart';
-import '../components/interactions/share.dart';
+import 'package:provider/provider.dart';
 
 class PostDetailPage extends StatefulWidget {
-  final Post post;
+  final String postId;
 
-  const PostDetailPage({super.key, required this.post});
+  const PostDetailPage({super.key, required this.postId});
 
   @override
   State<PostDetailPage> createState() => _PostDetailPageState();
@@ -19,6 +16,7 @@ class PostDetailPage extends StatefulWidget {
 
 class _PostDetailPageState extends State<PostDetailPage> {
   final TextEditingController _commentController = TextEditingController();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   @override
   void dispose() {
@@ -26,212 +24,237 @@ class _PostDetailPageState extends State<PostDetailPage> {
     super.dispose();
   }
 
+  Future<void> _addComment() async {
+    if (_commentController.text.isNotEmpty) {
+      final user = _auth.currentUser;
+
+      if (user != null) {
+        // Récupération des données utilisateur dans Firestore
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (!userDoc.exists) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erreur : Utilisateur introuvable.')),
+          );
+          return;
+        }
+
+        final userData = userDoc.data() ?? {};
+
+        // Configuration des champs du commentaire
+        final authorAvatar = userData['avatar']?.isNotEmpty == true
+            ? userData['avatar']
+            : 'https://via.placeholder.com/150'; // URL par défaut
+
+        final authorName = userData['username'] ?? 'Anonyme';
+
+        final comment = Comment(
+          id: FirebaseFirestore.instance
+              .collection('posts')
+              .doc(widget.postId)
+              .collection('comments')
+              .doc()
+              .id,
+          postId: widget.postId,
+          content: _commentController.text,
+          userId: user.uid,
+          authorName: authorName,
+          authorAvatar: authorAvatar,
+          timestamp: DateTime.now(),
+        );
+
+        try {
+          await Provider.of<CommentProvider>(context, listen: false)
+              .addComment(widget.postId, comment);
+          await FirebaseFirestore.instance
+              .collection('posts')
+              .doc(widget.postId)
+              .update({'commentCount': FieldValue.increment(1)});
+          _commentController.clear();
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erreur lors de l’ajout du commentaire.')),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vous devez être connecté pour commenter.'),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.post.owner.username)),
+      appBar: AppBar(title: const Text('Détails du Post')),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundImage: NetworkImage(widget.post.owner.avatar),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(widget.post.owner.username,
-                          style: TextStyle(fontSize: 16)),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(widget.post.content ?? 'No content',
-                      style: TextStyle(fontSize: 16)),
-                  const SizedBox(height: 10),
-                  if (widget.post.image != null)
-                    Image.network(widget.post.image!),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Consumer<LikeProvider>(
-                        builder: (context, likeProvider, _) {
-                          final likeCount =
-                              likeProvider.getLikeCount(widget.post.hashCode);
-                          final hasLiked = likeProvider.hasLiked(
-                              widget.post.hashCode, 'currentUserId');
-                          return Like(
-                            likeCount: likeCount,
-                            onLike: () => likeProvider.toggleLike(
-                                widget.post.hashCode, 'currentUserId'),
-                            hasLiked: hasLiked,
-                          );
+            // Section des commentaires.
+            StreamBuilder<List<Comment>>(
+              stream: Provider.of<CommentProvider>(context)
+                  .getRootComments(widget.postId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Center(
+                        child: Text('Aucun commentaire pour le moment.')),
+                  );
+                }
+
+                final comments = snapshot.data!;
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: comments.length,
+                  itemBuilder: (context, index) {
+                    final comment = comments[index];
+
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: NetworkImage(comment.authorAvatar),
+                        onBackgroundImageError: (_, __) {
+                          // Utiliser une image par défaut en cas d'erreur
+                          setState(() {
+                            comment.authorAvatar =
+                                'https://via.placeholder.com/150';
+                          });
                         },
                       ),
-                      Consumer<CommentProvider>(
-                        builder: (context, commentProvider, _) {
-                          final commentCount = commentProvider
-                              .getComments(widget.post.hashCode)
-                              .length;
-                          return Comment(
-                            commentCount: commentCount,
-                            onComment: () {
-                              // Focus on the comment input field
-                              FocusScope.of(context).requestFocus(FocusNode());
+                      title: Text(comment.authorName),
+                      subtitle: Text(comment.content),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.thumb_up),
+                            onPressed: () {
+                              Provider.of<CommentProvider>(context,
+                                      listen: false)
+                                  .toggleLike(widget.postId, comment.id,
+                                      _auth.currentUser!.uid);
                             },
-                          );
-                        },
-                      ),
-                      Consumer<ShareProvider>(
-                        builder: (context, shareProvider, _) {
-                          final shareCount =
-                              shareProvider.getShareCount(widget.post.hashCode);
-                          return Share(
-                            shareCount: shareCount,
-                            onShare: () {
-                              shareProvider.addShare(widget.post.hashCode);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content:
-                                        Text('Post partagé avec succès !')),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.reply),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => CommentRepliesPage(
+                                    postId: widget.postId,
+                                    commentId: comment.id,
+                                  ),
+                                ),
                               );
                             },
-                          );
-                        },
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text('Comments:',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                ],
-              ),
+                    );
+                  },
+                );
+              },
             ),
-            _buildCommentSection(context),
           ],
         ),
       ),
-      bottomNavigationBar: _buildCommentInputField(context),
-    );
-  }
-
-  Widget _buildCommentSection(BuildContext context) {
-    return Consumer<CommentProvider>(
-      builder: (context, commentProvider, _) {
-        final comments = commentProvider.getComments(widget.post.hashCode);
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: comments.length,
-          itemBuilder: (context, index) {
-            final comment = comments[index];
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundImage: NetworkImage(comment.owner.avatar),
-              ),
-              title: Text(comment.content ?? 'No content'),
-              subtitle: Text(comment.owner.username),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Consumer<LikeProvider>(
-                    builder: (context, likeProvider, _) {
-                      final likeCount =
-                          likeProvider.getLikeCount(comment.hashCode);
-                      final hasLiked = likeProvider.hasLiked(
-                          comment.hashCode, 'currentUserId');
-                      return Like(
-                        likeCount: likeCount,
-                        onLike: () => likeProvider.toggleLike(
-                            comment.hashCode, 'currentUserId'),
-                        hasLiked: hasLiked,
-                      );
-                    },
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.comment),
-                    onPressed: () {
-                      _showCommentDialog(context, comment);
-                    },
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildCommentInputField(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _commentController,
-              decoration: const InputDecoration(
-                hintText: 'Add a comment...',
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _commentController,
+                decoration: const InputDecoration(
+                  hintText: 'Ajouter un commentaire...',
+                ),
               ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.send),
-            onPressed: () {
-              if (_commentController.text.isNotEmpty) {
-                final newComment = Post(
-                  owner: widget.post.owner,
-                  content: _commentController.text,
-                );
-                Provider.of<CommentProvider>(context, listen: false)
-                    .addComment(widget.post.hashCode, newComment);
-                _commentController.clear();
-              }
-            },
-          ),
-        ],
+            IconButton(
+              icon: const Icon(Icons.send),
+              onPressed: _addComment,
+            ),
+          ],
+        ),
       ),
     );
   }
+}
 
-  void _showCommentDialog(BuildContext context, Post comment) {
-    final TextEditingController _replyController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Reply to ${comment.owner.username}'),
-          content: TextField(
-            controller: _replyController,
-            decoration: const InputDecoration(
-              hintText: 'Add a reply...',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (_replyController.text.isNotEmpty) {
-                  final newReply = Post(
-                    owner: widget.post.owner,
-                    content: _replyController.text,
-                  );
-                  Provider.of<CommentProvider>(context, listen: false)
-                      .addComment(comment.hashCode, newReply);
-                  _replyController.clear();
-                  Navigator.of(context).pop();
-                }
-              },
-              child: const Text('Reply'),
-            ),
-          ],
-        );
-      },
+class CommentRepliesPage extends StatefulWidget {
+  final String postId;
+  final String commentId;
+
+  const CommentRepliesPage({
+    super.key,
+    required this.postId,
+    required this.commentId,
+  });
+
+  @override
+  _CommentRepliesPageState createState() => _CommentRepliesPageState();
+}
+
+class _CommentRepliesPageState extends State<CommentRepliesPage> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Réponses')),
+      body: StreamBuilder<List<Comment>>(
+        stream: Provider.of<CommentProvider>(context)
+            .getReplies(widget.postId, widget.commentId),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Center(child: Text('Aucune réponse pour le moment.')),
+            );
+          }
+
+          final replies = snapshot.data!;
+
+          return ListView.builder(
+            itemCount: replies.length,
+            itemBuilder: (context, index) {
+              final reply = replies[index];
+
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundImage: NetworkImage(reply.authorAvatar),
+                  onBackgroundImageError: (_, __) {
+                    // Utiliser une image par défaut en cas d'erreur
+                    setState(() {
+                      reply.authorAvatar = 'https://via.placeholder.com/150';
+                    });
+                  },
+                ),
+                title: Text(reply.authorName),
+                subtitle: Text(reply.content),
+                trailing: Text(
+                  reply.timestamp.toString(),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
